@@ -1,0 +1,110 @@
+---
+/**
+ * FilterToolbar.astro
+ * -------------------
+ *
+ * Minimal toolbar markup — Filters trigger, results count, sort
+ * `<select>`, grid/list view toggle. Wires up via the matching
+ * runtime in `@arraypress/filter-toolbar-astro/runtime`.
+ *
+ * The component renders the bare-minimum DOM contract the runtime
+ * needs to query: ids `#open-filters`, `#active-filter-count`,
+ * `#results-count`, `#sort-select`, `#view-grid`, `#view-list`. The
+ * surrounding drawer / chips / price slider / pagination markup
+ * stays yours — the runtime queries those by default ids too, so
+ * if you keep the convention you don't have to pass selectors.
+ *
+ * Ships no styles — exposes `.fb-toolbar*` class hooks only.
+ *
+ * @example
+ *   ---
+ *   import { FilterToolbar } from '@arraypress/filter-toolbar-astro';
+ *   ---
+ *   <FilterToolbar resultsCount={products.length} />
+ *
+ *   <div id="product-grid" class="fb-grid fb-grid--grid">
+ *     { products.map(p => <ProductCard product={p} />) }
+ *   </div>
+ *
+ *   <script>
+ *     import { initFilterToolbar } from '@arraypress/filter-toolbar-astro/runtime';
+ *     document.addEventListener('astro:page-load', () => {
+ *       initFilterToolbar({ pageSize: 24, currencySymbol: '£' });
+ *     });
+ *   </script>
+ */
+
+import { DEFAULT_SORT_OPTIONS } from './types';
+import type { FilterToolbarProps } from './types';
+
+const {
+	resultsCount,
+	sortOptions = DEFAULT_SORT_OPTIONS,
+	showFiltersTrigger = true,
+	filtersLabel = 'Filters',
+	resultsLabel = 'results',
+	showViewToggle = true,
+	sortAriaLabel = 'Sort products',
+	class: className,
+} = Astro.props as FilterToolbarProps;
+---
+
+<div class:list={['fb-toolbar', className]}>
+	{showFiltersTrigger && (
+		<button
+			id="open-filters"
+			type="button"
+			class="fb-toolbar-filters"
+			aria-controls="filter-drawer"
+			aria-expanded="false"
+		>
+			<span class="fb-toolbar-filters-label">{filtersLabel}</span>
+			<span
+				id="active-filter-count"
+				class="fb-toolbar-active-badge"
+				hidden
+			>0</span>
+		</button>
+	)}
+
+	<span class="fb-toolbar-count">
+		<span id="results-count" class="fb-toolbar-count-num">{resultsCount ?? ''}</span>
+		<span class="fb-toolbar-count-label">{resultsLabel}</span>
+	</span>
+
+	<div class="fb-toolbar-right">
+		<label class="fb-toolbar-sort">
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="fb-toolbar-sort-icon" aria-hidden="true">
+				<path d="M3 6h18M6 12h12M10 18h4"/>
+			</svg>
+			<select id="sort-select" aria-label={sortAriaLabel} class="fb-toolbar-sort-select">
+				{sortOptions.map(o => (
+					<option value={o.value}>{o.label}</option>
+				))}
+			</select>
+		</label>
+
+		{showViewToggle && (
+			<div role="group" aria-label="View mode" class="fb-toolbar-view">
+				<button
+					id="view-grid"
+					type="button"
+					class="fb-toolbar-view-btn active"
+					data-view="grid"
+					aria-label="Grid view"
+				>
+					<span aria-hidden="true">▦</span>
+				</button>
+				<button
+					id="view-list"
+					type="button"
+					class="fb-toolbar-view-btn"
+					data-view="list"
+					aria-label="List view"
+				>
+					<span aria-hidden="true">≡</span>
+				</button>
+			</div>
+		)}
+	</div>
+</div>
