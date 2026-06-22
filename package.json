@@ -1,6 +1,6 @@
 {
   "name": "@arraypress/filter-toolbar-astro",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Astro listing toolbar — sort + grid/list view toggle + results count, with a client-side filter/sort/paginate runtime (paged, load-more, infinite).",
   "type": "module",
   "files": [
@@ -51,7 +51,7 @@
     "registry": "https://registry.npmjs.org/"
   },
   "peerDependencies": {
-    "astro": "^6.0.0"
+    "astro": "^6.0.0 || ^7.0.0"
   },
   "scripts": {
     "test": "vitest run",

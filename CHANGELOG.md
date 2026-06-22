@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.1] — Unreleased
+
+### Changed
+
+- Widened the `astro` peerDependency to `^6.0.0 || ^7.0.0` for
+  Astro 7 readiness. No runtime changes — the component is unaffected by the
+  Astro 7 compiler / Vite 8 (Rolldown) upgrade.
+
 ## [1.0.0] — Unreleased
 
 ### Initial Release
