@@ -1,6 +1,6 @@
 {
   "name": "@arraypress/filter-toolbar-astro",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Astro listing toolbar — sort + grid/list view toggle + results count, with a client-side filter/sort/paginate runtime (paged, load-more, infinite).",
   "type": "module",
   "files": [
@@ -60,6 +60,7 @@
   },
   "devDependencies": {
     "astro": "^6.3.7",
+    "happy-dom": "^20.10.6",
     "typescript": "^6.0.3",
     "vitest": "^4.1.7"
   }

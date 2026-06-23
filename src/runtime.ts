@@ -26,6 +26,7 @@
  */
 
 import type {
+	AttributeFacet,
 	FilterToolbarOptions,
 	FilterToolbarSelectors,
 	PaginationMode,
@@ -78,6 +79,7 @@ export function initFilterToolbar(opts: FilterToolbarOptions): boolean {
 		gridClass = 'fb-grid--grid',
 		listClass = 'fb-grid--list',
 		cardSelector = '.product-card',
+		attributeFacets = [],
 	} = opts;
 	const sel = { ...DEFAULT_SELECTORS, ...(opts.selectors ?? {}) };
 	const mode: PaginationMode = paginationMode;
@@ -103,13 +105,32 @@ export function initFilterToolbar(opts: FilterToolbarOptions): boolean {
 	let revealedChunks = 1;
 	let filteredCards: HTMLElement[] = [];
 
+	// Multi-select attribute facets (genre/format/synth/…). Each facet's
+	// key maps to the Set of currently-selected token values.
+	const activeFacets = new Map<string, Set<string>>();
+	attributeFacets.forEach((f) => activeFacets.set(f.key, new Set<string>()));
+
+	function facetTokens(card: HTMLElement, dataKey: string): string[] {
+		return (card.dataset[dataKey] ?? '')
+			.split(/[,\s]+/)
+			.map((s) => s.trim())
+			.filter(Boolean);
+	}
+
 	function recomputeFilter(): void {
 		filteredCards = cards.filter((card) => {
 			const cat = card.dataset.category ?? '';
 			const price = Number(card.dataset.price ?? 0);
 			const matchesCat = activeFilter === 'all' || cat === activeFilter;
 			const matchesPrice = price <= maxPrice;
-			return matchesCat && matchesPrice;
+			// Every active facet must match (AND across facets); within a
+			// facet the card needs at least one selected token (OR).
+			const matchesFacets = attributeFacets.every((facet) => {
+				const sel = activeFacets.get(facet.key);
+				if (!sel || sel.size === 0) return true;
+				return facetTokens(card, facet.dataKey).some((v) => sel.has(v));
+			});
+			return matchesCat && matchesPrice && matchesFacets;
 		});
 	}
 
@@ -131,6 +152,7 @@ export function initFilterToolbar(opts: FilterToolbarOptions): boolean {
 		let active = 0;
 		if (activeFilter !== 'all') active++;
 		if (maxPrice !== Infinity) active++;
+		activeFacets.forEach((set) => { active += set.size; });
 		if (badgeEl) {
 			badgeEl.textContent = String(active);
 			badgeEl.hidden = active === 0;
@@ -309,6 +331,50 @@ export function initFilterToolbar(opts: FilterToolbarOptions): boolean {
 		});
 	});
 
+	// ---- Multi-select attribute facets (genre / format / synth / …) ----
+	function syncFacetUrl(): void {
+		const params = new URLSearchParams(location.search);
+		let touched = false;
+		attributeFacets.forEach((facet) => {
+			if (!facet.urlParam) return;
+			touched = true;
+			const set = activeFacets.get(facet.key);
+			if (set && set.size > 0) params.set(facet.key, [...set].join(','));
+			else params.delete(facet.key);
+		});
+		if (!touched) return;
+		const qs = params.toString();
+		history.replaceState(null, '', qs ? `${location.pathname}?${qs}` : location.pathname);
+	}
+
+	function wireFacet(facet: AttributeFacet): void {
+		const set = activeFacets.get(facet.key);
+		if (!set) return;
+		const facetChips = document.querySelectorAll<HTMLElement>(facet.chipSelector);
+		const setChipState = (chip: HTMLElement, on: boolean): void => {
+			chip.classList.toggle('active', on);
+			chip.setAttribute('aria-pressed', String(on));
+		};
+		facetChips.forEach((chip) => {
+			chip.addEventListener('click', () => {
+				const val = chip.dataset.value ?? '';
+				if (val === '' || val === 'all') {
+					set.clear();
+					facetChips.forEach((c) => setChipState(c, false));
+				} else if (set.has(val)) {
+					set.delete(val);
+					setChipState(chip, false);
+				} else {
+					set.add(val);
+					setChipState(chip, true);
+				}
+				applyFilter();
+				syncFacetUrl();
+			});
+		});
+	}
+	attributeFacets.forEach(wireFacet);
+
 	function syncSort(val: SortMode): void {
 		activeSort = val;
 		if (sortSelect && sortSelect.value !== val) sortSelect.value = val;
@@ -365,6 +431,16 @@ export function initFilterToolbar(opts: FilterToolbarOptions): boolean {
 			priceInput.value = priceInput.max;
 			priceInput.dispatchEvent(new Event('input'));
 		}
+		// Clear every attribute facet too.
+		attributeFacets.forEach((facet) => {
+			activeFacets.get(facet.key)?.clear();
+			document.querySelectorAll<HTMLElement>(facet.chipSelector).forEach((c) => {
+				c.classList.remove('active');
+				c.setAttribute('aria-pressed', 'false');
+			});
+		});
+		syncFacetUrl();
+		applyFilter();
 	});
 
 	function applyView(view: ViewMode): void {
@@ -382,6 +458,20 @@ export function initFilterToolbar(opts: FilterToolbarOptions): boolean {
 	} catch { /* ignore */ }
 
 	const params = new URLSearchParams(location.search);
+	// Restore attribute-facet selections from the URL (facets with urlParam).
+	attributeFacets.forEach((facet) => {
+		if (!facet.urlParam) return;
+		const raw = params.get(facet.key);
+		if (!raw) return;
+		const set = activeFacets.get(facet.key);
+		if (!set) return;
+		raw.split(',').map((s) => s.trim()).filter(Boolean).forEach((v) => set.add(v));
+		document.querySelectorAll<HTMLElement>(facet.chipSelector).forEach((chip) => {
+			const on = set.has(chip.dataset.value ?? '');
+			chip.classList.toggle('active', on);
+			chip.setAttribute('aria-pressed', String(on));
+		});
+	});
 	const initialCat = params.get('cat');
 	if (initialCat) {
 		const chip = document.querySelector<HTMLButtonElement>(

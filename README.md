@@ -126,12 +126,62 @@ initFilterToolbar({
   gridClass: 'fb-grid--grid',
   listClass: 'fb-grid--list',
   cardSelector: '.product-card',
+  attributeFacets: [ /* optional multi-select facets — see below */ ],
   selectors: { /* override any of the default ids */ },
 });
 ```
 
 Idempotent — calling twice on the same `#product-grid` is a no-op.
 Safe to fire from both `DOMContentLoaded` and `astro:page-load`.
+
+## Attribute facets
+
+Beyond the single category chip + price slider, you can layer any number
+of **multi-select attribute facets** (genre, format, synth, tag, …) via
+`attributeFacets`. Each facet reads a delimited token list off a card
+data attribute and shows a card only if — for every facet with an active
+selection — the card carries at least one selected token (OR within a
+facet, AND across facets, AND with category + price).
+
+Card markup — emit space- or comma-separated tokens (use slugs, no
+internal spaces):
+
+```html
+<article class="product-card"
+  data-category="pack"
+  data-genre="uplifting-trance progressive-trance"
+  data-format="presets midi">…</article>
+```
+
+Facet chips — each carries `data-value`; a `data-value=""` or
+`data-value="all"` chip clears that facet:
+
+```html
+<button class="facet-genre" data-value="uplifting-trance" aria-pressed="false">Uplifting Trance</button>
+<button class="facet-genre" data-value="progressive-trance" aria-pressed="false">Progressive Trance</button>
+```
+
+```ts
+initFilterToolbar({
+  pageSize: 24,
+  attributeFacets: [
+    { key: 'genre',  dataKey: 'genre',  chipSelector: '.facet-genre' },
+    { key: 'format', dataKey: 'format', chipSelector: '.facet-format', urlParam: true },
+  ],
+});
+```
+
+| Field          | Required | Description                                                         |
+|----------------|----------|---------------------------------------------------------------------|
+| `key`          | yes      | Stable unique id (also the URL param name when `urlParam`).         |
+| `dataKey`      | yes      | Card dataset key — `'genre'` reads `data-genre`.                    |
+| `chipSelector` | yes      | Selector for the facet's chip buttons (each with `data-value`).     |
+| `urlParam`     | no       | Reflect the selection into the URL as `?key=a,b` + restore on load. |
+
+The runtime toggles `.active` + `aria-pressed` on chips, folds active
+facet values into the `#active-filter-count` badge, and clears them with
+the drawer's `#clear-filters` button. Omitting `attributeFacets` leaves
+the existing single-facet behaviour completely unchanged.
 
 ## Deep-linking
 

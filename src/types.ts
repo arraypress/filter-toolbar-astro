@@ -120,6 +120,38 @@ export interface FilterToolbarSelectors {
 	sentinel?: string;
 }
 
+/**
+ * A multi-select attribute facet (genre / format / synth / tag / …)
+ * layered on top of the built-in single category chip + price slider.
+ *
+ * The runtime reads a delimited value list off each card's data
+ * attribute and shows a card only if — for EVERY facet that has an
+ * active selection — the card carries at least one of the selected
+ * values (OR within a facet, AND across facets, AND with the category
+ * + price filters).
+ *
+ * Card markup: emit the card's values as space- OR comma-separated
+ * tokens, e.g. `data-genre="uplifting-trance progressive-trance"`.
+ * Use slugs (no internal spaces) so the tokens parse cleanly. Each
+ * facet chip carries `data-value="<token>"`; a chip with
+ * `data-value=""` or `data-value="all"` clears that facet.
+ */
+export interface AttributeFacet {
+	/** Stable unique key, e.g. `'genre'`. Used for the active-filter
+	 *  count and (when `urlParam` is set) the URL query param. */
+	key: string;
+	/** The card dataset key holding the token list. `dataKey: 'genre'`
+	 *  reads `card.dataset.genre` (the `data-genre` attribute);
+	 *  `data-foo-bar` maps to `dataKey: 'fooBar'` the usual way. */
+	dataKey: string;
+	/** Selector for this facet's chip buttons (each with `data-value`),
+	 *  e.g. `'.facet-genre'`. */
+	chipSelector: string;
+	/** Reflect the active selection into the URL as `?<key>=a,b` and
+	 *  restore it on load. Default `false`. */
+	urlParam?: boolean;
+}
+
 /** Constructor options for `initFilterToolbar()`. */
 export interface FilterToolbarOptions {
 	/** Cards per page. Required. */
@@ -145,4 +177,9 @@ export interface FilterToolbarOptions {
 	listClass?: string;
 	/** CSS class used for card children (used by querySelectorAll). Default `'.product-card'`. */
 	cardSelector?: string;
+	/** Extra multi-select attribute facets (genre / format / synth / …)
+	 *  layered on top of the built-in category chip + price slider.
+	 *  Default: none — omitting it leaves the existing single-facet
+	 *  behaviour completely unchanged. */
+	attributeFacets?: AttributeFacet[];
 }
