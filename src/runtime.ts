@@ -28,6 +28,7 @@
 import type {
 	AttributeFacet,
 	FilterToolbarOptions,
+	RangeFacet,
 	FilterToolbarSelectors,
 	PaginationMode,
 	SortMode,
@@ -80,6 +81,7 @@ export function initFilterToolbar(opts: FilterToolbarOptions): boolean {
 		listClass = 'fb-grid--list',
 		cardSelector = '.product-card',
 		attributeFacets = [],
+		rangeFacets = [],
 	} = opts;
 	const sel = { ...DEFAULT_SELECTORS, ...(opts.selectors ?? {}) };
 	const mode: PaginationMode = paginationMode;
@@ -117,6 +119,29 @@ export function initFilterToolbar(opts: FilterToolbarOptions): boolean {
 			.filter(Boolean);
 	}
 
+	// Numeric range facets (BPM / year / …): each holds its two inputs.
+	interface RangeState { facet: RangeFacet; lo: HTMLInputElement; hi: HTMLInputElement; out: HTMLElement | null }
+	const ranges: RangeState[] = [];
+	rangeFacets.forEach((facet) => {
+		const lo = document.querySelector<HTMLInputElement>(facet.minInput);
+		const hi = document.querySelector<HTMLInputElement>(facet.maxInput);
+		if (lo && hi) ranges.push({ facet, lo, hi, out: facet.output ? document.querySelector<HTMLElement>(facet.output) : null });
+	});
+	/** The selection, and whether it's narrowed from the inputs' bounds. */
+	function rangeOf(r: RangeState): { lo: number; hi: number; active: boolean } {
+		const lo = Number(r.lo.value);
+		const hi = Number(r.hi.value);
+		return { lo, hi, active: lo > Number(r.lo.min) || hi < Number(r.hi.max) };
+	}
+	/** A card's value as [min, max]: "128" → [128, 128], "120-128" → [120, 128]. */
+	function cardRange(card: HTMLElement, dataKey: string): [number, number] | null {
+		const raw = (card.dataset[dataKey] ?? '').trim();
+		if (!raw) return null;
+		const nums = raw.split(/\s*[-–,]\s*/).map(Number).filter((n) => Number.isFinite(n));
+		if (!nums.length) return null;
+		return [Math.min(...nums), Math.max(...nums)];
+	}
+
 	function recomputeFilter(): void {
 		filteredCards = cards.filter((card) => {
 			const cat = card.dataset.category ?? '';
@@ -130,7 +155,14 @@ export function initFilterToolbar(opts: FilterToolbarOptions): boolean {
 				if (!sel || sel.size === 0) return true;
 				return facetTokens(card, facet.dataKey).some((v) => sel.has(v));
 			});
-			return matchesCat && matchesPrice && matchesFacets;
+			// Every narrowed range must overlap the card's own range.
+			const matchesRanges = ranges.every((r) => {
+				const { lo, hi, active } = rangeOf(r);
+				if (!active) return true;
+				const v = cardRange(card, r.facet.dataKey);
+				return v !== null && v[0] <= hi && v[1] >= lo;
+			});
+			return matchesCat && matchesPrice && matchesFacets && matchesRanges;
 		});
 	}
 
@@ -153,6 +185,7 @@ export function initFilterToolbar(opts: FilterToolbarOptions): boolean {
 		if (activeFilter !== 'all') active++;
 		if (maxPrice !== Infinity) active++;
 		activeFacets.forEach((set) => { active += set.size; });
+		ranges.forEach((r) => { if (rangeOf(r).active) active++; });
 		if (badgeEl) {
 			badgeEl.textContent = String(active);
 			badgeEl.hidden = active === 0;
@@ -375,6 +408,40 @@ export function initFilterToolbar(opts: FilterToolbarOptions): boolean {
 	}
 	attributeFacets.forEach(wireFacet);
 
+	// ---- Numeric range facets ----
+	function renderRange(r: RangeState): void {
+		const { lo, hi, active } = rangeOf(r);
+		if (r.out) r.out.textContent = r.facet.format ? r.facet.format(lo, hi, !active) : `${lo}–${hi}`;
+	}
+	function syncRangeUrl(): void {
+		const withUrl = ranges.filter((r) => r.facet.urlParam);
+		if (!withUrl.length) return;
+		const params = new URLSearchParams(location.search);
+		withUrl.forEach((r) => {
+			const { lo, hi, active } = rangeOf(r);
+			if (active) params.set(r.facet.key, `${lo}-${hi}`);
+			else params.delete(r.facet.key);
+		});
+		const qs = params.toString();
+		history.replaceState(null, '', qs ? `${location.pathname}?${qs}` : location.pathname);
+	}
+	ranges.forEach((r) => {
+		// The ends can't cross: the one being dragged stops at the other.
+		r.lo.addEventListener('input', () => {
+			if (Number(r.lo.value) > Number(r.hi.value)) r.lo.value = r.hi.value;
+			renderRange(r);
+			applyFilter();
+			syncRangeUrl();
+		});
+		r.hi.addEventListener('input', () => {
+			if (Number(r.hi.value) < Number(r.lo.value)) r.hi.value = r.lo.value;
+			renderRange(r);
+			applyFilter();
+			syncRangeUrl();
+		});
+		renderRange(r);
+	});
+
 	function syncSort(val: SortMode): void {
 		activeSort = val;
 		if (sortSelect && sortSelect.value !== val) sortSelect.value = val;
@@ -440,6 +507,12 @@ export function initFilterToolbar(opts: FilterToolbarOptions): boolean {
 			});
 		});
 		syncFacetUrl();
+		ranges.forEach((r) => {
+			r.lo.value = r.lo.min;
+			r.hi.value = r.hi.max;
+			renderRange(r);
+		});
+		syncRangeUrl();
 		applyFilter();
 	});
 
@@ -471,6 +544,15 @@ export function initFilterToolbar(opts: FilterToolbarOptions): boolean {
 			chip.classList.toggle('active', on);
 			chip.setAttribute('aria-pressed', String(on));
 		});
+	});
+	// Restore range selections from the URL (`?bpm=120-130`).
+	ranges.forEach((r) => {
+		if (!r.facet.urlParam) return;
+		const m = (params.get(r.facet.key) ?? '').match(/^(-?[\d.]+)-(-?[\d.]+)$/);
+		if (!m) return;
+		r.lo.value = String(Math.min(Number(m[1]), Number(m[2])));
+		r.hi.value = String(Math.max(Number(m[1]), Number(m[2])));
+		renderRange(r);
 	});
 	const initialCat = params.get('cat');
 	if (initialCat) {

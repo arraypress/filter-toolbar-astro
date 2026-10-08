@@ -183,6 +183,53 @@ facet values into the `#active-filter-count` badge, and clears them with
 the drawer's `#clear-filters` button. Omitting `attributeFacets` leaves
 the existing single-facet behaviour completely unchanged.
 
+## Range facets
+
+For a number — BPM, year, length — use `rangeFacets`: a pair of range
+inputs, one per end. A card carries a single value or a range of its own,
+and shows when its range **overlaps** the selected one (a 120–128 BPM pack
+matches a 125–135 search). The facet is inactive while both inputs sit at
+their own `min` / `max`, so set those from your data.
+
+```html
+<article class="product-card" data-bpm="138">…</article>
+<article class="product-card" data-bpm="120-128">…</article>
+
+<output id="bpm-out"></output>
+<input id="bpm-lo" type="range" min="80" max="180" value="80"  aria-label="Lowest BPM">
+<input id="bpm-hi" type="range" min="80" max="180" value="180" aria-label="Highest BPM">
+```
+
+```ts
+initFilterToolbar({
+  pageSize: 24,
+  rangeFacets: [{
+    key: 'bpm',
+    dataKey: 'bpm',
+    minInput: '#bpm-lo',
+    maxInput: '#bpm-hi',
+    output: '#bpm-out',
+    format: (lo, hi, full) => (full ? 'Any tempo' : `${lo}–${hi} BPM`),
+    urlParam: true,
+  }],
+});
+```
+
+| Field      | Required | Description                                                          |
+|------------|----------|----------------------------------------------------------------------|
+| `key`      | yes      | Stable unique id (also the URL param name when `urlParam`).          |
+| `dataKey`  | yes      | Card dataset key — `'bpm'` reads `data-bpm`.                         |
+| `minInput` | yes      | Selector for the low end's range input.                              |
+| `maxInput` | yes      | Selector for the high end's range input.                             |
+| `output`   | no       | Element that shows the selection as text.                            |
+| `format`   | no       | `(lo, hi, full) => string` for `output`. Default `lo–hi`.             |
+| `urlParam` | no       | Reflect the selection into the URL as `?key=lo-hi` + restore on load. |
+
+The runtime only reads and writes the two inputs' values (the ends can't
+cross), so the look is yours: two stacked inputs over one track make a
+dual-thumb slider. Cards with no value are hidden while the range is
+narrowed.
+
 ## Deep-linking
 
 `?cat=bundles` on the URL auto-clicks the matching chip on first

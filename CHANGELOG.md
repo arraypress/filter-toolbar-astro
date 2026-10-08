@@ -2,7 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.0] — Unreleased
+## [1.2.0] — 2026-10-08
+
+### Added
+
+- **Numeric range facets** via the new `rangeFacets` option: two
+  `<input type="range">` ends narrow the listing to cards whose value falls
+  in the window (BPM, year, duration…). A card carries one number
+  (`data-bpm="128"`) or a range of its own (`data-bpm="120-128"`) and
+  matches when the two OVERLAP. Cards with no value are hidden while the
+  range is narrowed. The ends can't cross, an optional `output` element
+  shows the selection (custom `format`), a narrowed range counts as one
+  active filter, `#clear-filters` resets it, and opt-in `urlParam`
+  reflects/restores `?bpm=120-128`.
+
+### Changed
+
+- Nothing breaking — omitting `rangeFacets` leaves behaviour unchanged.
+
+## [1.1.0] — 2026-06-24
 
 ### Added
 

@@ -152,6 +152,41 @@ export interface AttributeFacet {
 	urlParam?: boolean;
 }
 
+/**
+ * A numeric range facet (BPM, year, duration…): two `<input type="range">`
+ * elements, one per end, narrow the listing to cards whose value falls
+ * inside the range.
+ *
+ * Card markup: one number (`data-bpm="128"`) or a range of its own
+ * (`data-bpm="120-128"`, for a pack spanning tempos). A card matches when
+ * its range OVERLAPS the selected one, so a 120–128 pack shows up for a
+ * 125–135 search. A card with no value is hidden while the range is
+ * narrowed (it can't be said to match) and shown when it's at full width.
+ *
+ * The facet is inactive while both inputs sit at their own `min`/`max`,
+ * so the inputs' bounds ARE the facet's bounds — set them from your data.
+ */
+export interface RangeFacet {
+	/** Stable unique key, e.g. `'bpm'`. Used for the URL query param. */
+	key: string;
+	/** The card dataset key holding the value: `dataKey: 'bpm'` reads
+	 *  `data-bpm`. */
+	dataKey: string;
+	/** Selector for the low end's `<input type="range">`. */
+	minInput: string;
+	/** Selector for the high end's `<input type="range">`. */
+	maxInput: string;
+	/** Selector for an element that shows the selected range as text
+	 *  (updated on every input). Optional. */
+	output?: string;
+	/** Text for `output`. Default `"<lo>–<hi>"`. `full` is true while the
+	 *  facet is inactive (both ends at their bounds). */
+	format?: (lo: number, hi: number, full: boolean) => string;
+	/** Reflect the selection into the URL as `?<key>=lo-hi` and restore it
+	 *  on load. Default `false`. */
+	urlParam?: boolean;
+}
+
 /** Constructor options for `initFilterToolbar()`. */
 export interface FilterToolbarOptions {
 	/** Cards per page. Required. */
@@ -182,4 +217,7 @@ export interface FilterToolbarOptions {
 	 *  Default: none — omitting it leaves the existing single-facet
 	 *  behaviour completely unchanged. */
 	attributeFacets?: AttributeFacet[];
+	/** Numeric range facets (BPM / year / …), each a pair of range
+	 *  inputs. Default: none. */
+	rangeFacets?: RangeFacet[];
 }
