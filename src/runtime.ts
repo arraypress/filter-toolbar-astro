@@ -65,6 +65,48 @@ interface InitMarker extends HTMLElement {
 	__apFtInit?: boolean;
 }
 
+/** Roles whose on/off state ARIA spells `aria-selected`. */
+const SELECTED_ROLES = new Set(['tab', 'option', 'row', 'gridcell', 'columnheader', 'rowheader', 'treeitem']);
+/** Roles whose on/off state ARIA spells `aria-checked`. */
+const CHECKED_ROLES = new Set(['checkbox', 'menuitemcheckbox', 'menuitemradio', 'radio', 'switch']);
+
+/**
+ * Reflect a chip's on/off state: the `.active` class, plus the ARIA
+ * attribute its role allows. A plain `<button>` gets `aria-pressed` (a
+ * toggle button); `aria-selected` is only valid on roles like `tab` /
+ * `option`, so a chip that declares one of those keeps it, and a
+ * checkbox-like role gets `aria-checked`. A stray `aria-selected` on a
+ * role-less chip is removed — it isn't valid there.
+ */
+function setChipState(chip: HTMLElement, on: boolean): void {
+	chip.classList.toggle('active', on);
+	const role = (chip.getAttribute('role') ?? '').trim().toLowerCase();
+	if (SELECTED_ROLES.has(role)) {
+		chip.setAttribute('aria-selected', String(on));
+	} else if (CHECKED_ROLES.has(role)) {
+		chip.setAttribute('aria-checked', String(on));
+	} else {
+		chip.removeAttribute('aria-selected');
+		chip.setAttribute('aria-pressed', String(on));
+	}
+}
+
+/** What can take keyboard focus inside the drawer (for the focus trap). */
+const FOCUSABLE = [
+	'a[href]', 'area[href]', 'button:not([disabled])', 'input:not([disabled]):not([type="hidden"])',
+	'select:not([disabled])', 'textarea:not([disabled])', 'iframe', 'summary',
+	'[contenteditable]:not([contenteditable="false"])', '[tabindex]',
+].join(',');
+
+function focusablesIn(root: HTMLElement): HTMLElement[] {
+	return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => {
+		if (el.getAttribute('tabindex') === '-1') return false;
+		if (el.closest('[hidden], [inert]')) return false;
+		const cs = getComputedStyle(el);
+		return cs.display !== 'none' && cs.visibility !== 'hidden';
+	});
+}
+
 /**
  * Wire up the listing page. Returns `true` on first bind, `false`
  * if it bailed (no grid, or grid already initialised).
@@ -351,14 +393,19 @@ export function initFilterToolbar(opts: FilterToolbarOptions): boolean {
 		applyFilter(false);
 	}
 
+	// Category chips. Only chips carrying `data-filter` get ARIA state (a
+	// `.chip` link elsewhere on the page only has its class toggled). Sync
+	// the server-rendered state now so a stale `aria-selected` on a plain
+	// button is replaced before anyone clicks.
+	const markChip = (c: HTMLElement, on: boolean): void => {
+		if (c.hasAttribute('data-filter')) setChipState(c, on);
+		else c.classList.toggle('active', on);
+	};
+	chips.forEach((c) => { if (c.hasAttribute('data-filter')) setChipState(c, c.classList.contains('active')); });
 	chips.forEach((chip) => {
 		chip.addEventListener('click', () => {
 			const f = chip.dataset.filter ?? 'all';
-			chips.forEach((c) => {
-				const match = c.dataset.filter === f;
-				c.classList.toggle('active', match);
-				c.setAttribute('aria-selected', String(match));
-			});
+			chips.forEach((c) => markChip(c, c.dataset.filter === f));
 			activeFilter = f;
 			applyFilter();
 		});
@@ -384,10 +431,6 @@ export function initFilterToolbar(opts: FilterToolbarOptions): boolean {
 		const set = activeFacets.get(facet.key);
 		if (!set) return;
 		const facetChips = document.querySelectorAll<HTMLElement>(facet.chipSelector);
-		const setChipState = (chip: HTMLElement, on: boolean): void => {
-			chip.classList.toggle('active', on);
-			chip.setAttribute('aria-pressed', String(on));
-		};
 		facetChips.forEach((chip) => {
 			chip.addEventListener('click', () => {
 				const val = chip.dataset.value ?? '';
@@ -468,27 +511,77 @@ export function initFilterToolbar(opts: FilterToolbarOptions): boolean {
 	const applyBtn = document.querySelector<HTMLButtonElement>(sel.applyBtn);
 	const clearBtn = document.querySelector<HTMLButtonElement>(sel.clearBtn);
 
+	// ---- Filter drawer ----
+	// `data-open` is the source of truth. `aria-hidden` and `inert` move in
+	// lockstep with it, so a closed drawer's controls are out of the tab
+	// order as well as the accessibility tree (axe `aria-hidden-focus`).
+	// While open, focus is moved in and trapped; on close it returns to
+	// whatever opened the drawer.
+	let returnFocus: HTMLElement | null = null;
+	const isOpen = (): boolean => drawer?.dataset.open === 'true';
+
+	function setDrawerState(open: boolean): void {
+		if (drawer) {
+			drawer.dataset.open = String(open);
+			drawer.setAttribute('aria-hidden', String(!open));
+			drawer.toggleAttribute('inert', !open);
+		}
+		if (backdrop) backdrop.dataset.open = String(open);
+		openBtn?.setAttribute('aria-expanded', String(open));
+		document.body.classList.toggle('drawer-open', open);
+	}
 	function openDrawer(): void {
-		if (drawer)   drawer.dataset.open   = 'true';
-		if (backdrop) backdrop.dataset.open = 'true';
-		drawer?.setAttribute('aria-hidden', 'false');
-		openBtn?.setAttribute('aria-expanded', 'true');
-		document.body.classList.add('drawer-open');
+		if (!drawer || isOpen()) return;
+		const active = document.activeElement;
+		returnFocus = active instanceof HTMLElement && active !== document.body && !drawer.contains(active)
+			? active
+			: openBtn;
+		setDrawerState(true);
+		const target = drawer.querySelector<HTMLElement>('[autofocus]') ?? focusablesIn(drawer)[0] ?? drawer;
+		if (target === drawer && !drawer.hasAttribute('tabindex')) drawer.setAttribute('tabindex', '-1');
+		target.focus({ preventScroll: true });
 	}
 	function closeDrawer(): void {
-		if (drawer)   drawer.dataset.open   = 'false';
-		if (backdrop) backdrop.dataset.open = 'false';
-		drawer?.setAttribute('aria-hidden', 'true');
-		openBtn?.setAttribute('aria-expanded', 'false');
-		document.body.classList.remove('drawer-open');
+		if (!drawer || !isOpen()) return;
+		setDrawerState(false);
+		const to = returnFocus?.isConnected ? returnFocus : openBtn;
+		returnFocus = null;
+		const active = document.activeElement;
+		if (!active || active === document.body || drawer.contains(active)) to?.focus({ preventScroll: true });
 	}
+	// Initial state: closed unless the markup says otherwise.
+	if (drawer) setDrawerState(isOpen());
+
 	openBtn?.addEventListener('click', openDrawer);
 	closeBtn?.addEventListener('click', closeDrawer);
 	backdrop?.addEventListener('click', closeDrawer);
 	applyBtn?.addEventListener('click', closeDrawer);
-	document.addEventListener('keydown', (e) => {
-		if (e.key === 'Escape') closeDrawer();
-	});
+	if (drawer) {
+		// One document listener per drawer; it unbinds itself once a View
+		// Transition swaps the drawer out, so soft navs don't stack traps.
+		const ac = new AbortController();
+		document.addEventListener('keydown', (e) => {
+			if (!drawer.isConnected) { ac.abort(); return; }
+			if (!isOpen()) return;
+			if (e.key === 'Escape') { closeDrawer(); return; }
+			if (e.key !== 'Tab') return;
+			const items = focusablesIn(drawer);
+			const active = document.activeElement;
+			if (!items.length) { e.preventDefault(); drawer.focus(); return; }
+			const first = items[0];
+			const last = items[items.length - 1];
+			if (!active || !drawer.contains(active)) {
+				e.preventDefault();
+				(e.shiftKey ? last : first).focus();
+			} else if (e.shiftKey && (active === first || active === drawer)) {
+				e.preventDefault();
+				last.focus();
+			} else if (!e.shiftKey && active === last) {
+				e.preventDefault();
+				first.focus();
+			}
+		}, { signal: ac.signal });
+	}
 
 	clearBtn?.addEventListener('click', () => {
 		const allChip = document.querySelector<HTMLButtonElement>(`${sel.chips}[data-filter="all"]`);
@@ -501,10 +594,7 @@ export function initFilterToolbar(opts: FilterToolbarOptions): boolean {
 		// Clear every attribute facet too.
 		attributeFacets.forEach((facet) => {
 			activeFacets.get(facet.key)?.clear();
-			document.querySelectorAll<HTMLElement>(facet.chipSelector).forEach((c) => {
-				c.classList.remove('active');
-				c.setAttribute('aria-pressed', 'false');
-			});
+			document.querySelectorAll<HTMLElement>(facet.chipSelector).forEach((c) => setChipState(c, false));
 		});
 		syncFacetUrl();
 		ranges.forEach((r) => {
@@ -540,9 +630,7 @@ export function initFilterToolbar(opts: FilterToolbarOptions): boolean {
 		if (!set) return;
 		raw.split(',').map((s) => s.trim()).filter(Boolean).forEach((v) => set.add(v));
 		document.querySelectorAll<HTMLElement>(facet.chipSelector).forEach((chip) => {
-			const on = set.has(chip.dataset.value ?? '');
-			chip.classList.toggle('active', on);
-			chip.setAttribute('aria-pressed', String(on));
+			setChipState(chip, set.has(chip.dataset.value ?? ''));
 		});
 	});
 	// Restore range selections from the URL (`?bpm=120-130`).

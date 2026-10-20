@@ -2,6 +2,46 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] — 2026-10-21
+
+### Fixed
+
+- **The closed filter drawer is now `inert`.** The runtime toggled
+  `aria-hidden` on the drawer but never `inert`, so a closed drawer's
+  chips, selects and buttons stayed in the tab order inside an
+  `aria-hidden` subtree (axe `aria-hidden-focus`, WCAG 4.1.2). `inert` now
+  moves in lockstep with `aria-hidden`, including the initial closed state
+  set at init.
+- **Focus management for the drawer.** Opening moves focus into the drawer
+  (an `[autofocus]` element, else the first focusable control, else the
+  drawer itself), Tab / Shift+Tab are trapped inside it while it's open,
+  and closing (close / Done / backdrop / Escape) returns focus to the
+  control that opened it, falling back to `#open-filters`.
+- Escape is now a no-op while the drawer is closed (it used to re-run the
+  close routine on every press). The document key handler unbinds itself
+  once a View Transition swaps the drawer out, so soft navs don't stack
+  listeners.
+
+### Changed
+
+- **Category chips use `aria-pressed`, not `aria-selected`.** A plain
+  `<button>` can't carry `aria-selected` (it's only valid on `tab`,
+  `option`, `row`, `gridcell`, `treeitem` …). Chips now get the attribute
+  their role allows: no role → `aria-pressed`; `role="tab"` / `"option"` /
+  … → `aria-selected` (unchanged for markup that already declares one);
+  `role="checkbox"` / `"switch"` / … → `aria-checked`. A stale
+  `aria-selected` on a role-less chip is removed at init. `.active` is
+  unchanged. Attribute facets follow the same rule. **If you style
+  role-less chips with `[aria-selected="true"]`, switch to `.active` or
+  `[aria-pressed="true"]`.** Only chips carrying `data-filter` get ARIA
+  state, so a `.chip` link elsewhere on the page is left alone.
+- The drawer is set closed (`data-open="false"`, `aria-hidden="true"`,
+  `inert`) at init unless its markup has `data-open="true"`. It's meant to
+  be a slide-in drawer; an always-visible sidebar shouldn't be wired to
+  `selectors.drawer`.
+- Themes that mirrored `inert` off `data-open` with a MutationObserver can
+  drop that workaround (it stays harmless if left in).
+
 ## [1.2.0] — 2026-10-08
 
 ### Added

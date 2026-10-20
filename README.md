@@ -80,6 +80,27 @@ default ids/classes:
 Override any of these via `selectors` if your markup uses different
 ids.
 
+## Accessibility
+
+**Drawer.** The runtime keeps `data-open`, `aria-hidden` and `inert` in
+lockstep on the drawer (closed at init unless the markup says
+`data-open="true"`), so a closed drawer's controls are out of the tab order
+as well as the accessibility tree. Opening moves focus inside (an
+`[autofocus]` element, else the first focusable control) and traps Tab
+there; closing — close, Done, backdrop or Escape — returns focus to the
+control that opened it. Give the drawer dialog semantics in your markup:
+
+```html
+<aside id="filter-drawer" role="dialog" aria-modal="true"
+       aria-labelledby="filter-drawer-title" aria-hidden="true" inert>…</aside>
+```
+
+**Chips.** Category and facet chips get `.active` plus the ARIA state their
+role allows: a plain `<button>` gets `aria-pressed`; `role="tab"` /
+`"option"` (inside a `tablist` / `listbox`) get `aria-selected`; a
+checkbox-like role gets `aria-checked`. Style on `.active` to stay
+role-independent.
+
 ## Pagination modes
 
 - **`'paged'`** (default) — numbered prev/next + page buttons.
