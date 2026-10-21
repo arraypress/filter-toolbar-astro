@@ -48,6 +48,11 @@ describe('<FilterToolbar>', () => {
 		expect(tag?.[1]).toBe('42');
 	});
 
+	it('the count is a polite live region (role="status")', async () => {
+		const html = await render({ resultsCount: 3 });
+		expect(html).toMatch(/<span class="fb-toolbar-count" role="status">/);
+	});
+
 	it('uses the default sort options when none provided', async () => {
 		const html = await render();
 		expect(html).toContain('value="featured"');

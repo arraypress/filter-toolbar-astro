@@ -2,6 +2,47 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] — 2026-10-22
+
+### Added
+
+- **Staged selection** — `apply: 'staged'`. Changes inside the drawer (or
+  `stagedContainer`) are held until the Apply button fires; the grid, count,
+  badge and URL keep the applied selection meanwhile. Closing the drawer any
+  other way (close, backdrop, Escape) discards them and resets the controls.
+  Clear resets the staged and applied selection together. Controls outside
+  the container stay live. A new `#staged-count` (`selectors.stagedCount`)
+  shows how many cards the pending selection matches ("Show 12 results").
+- **Text search** — `search: { input, dataKeys, key, urlParam, debounce }`.
+  Every word must appear (any order, case- and accent-insensitive) in the
+  card attributes listed in `dataKeys` (default `['title']`). Debounced
+  (200 ms; Enter filters at once and doesn't submit the form), ANDed with
+  every facet, synced to `?q=` by default and restored on load, cleared by
+  Clear. Not counted in the filter badge.
+- **`filtertoolbar:change`** — a bubbling event on the grid, once at init and
+  after every applied change, with the state (`count`, `category`, `sort`,
+  `query`, `facets`, `ranges`, `maxPrice`) as `detail`.
+- **`getFilterToolbar(grid?)`** — the controller: `state()`, `setFacet()`,
+  `setQuery()`, `apply()`, `clear()`. For UI the runtime doesn't draw (e.g.
+  removable active-filter chips); its changes apply at once.
+- The toolbar's count (`.fb-toolbar-count`) is now `role="status"`, so the
+  new count is announced. The runtime only rewrites a count when it changes.
+
+### Fixed
+
+- **Clear resets the sort to `defaultSort`**, not a hard-coded `'featured'`.
+  A listing configured with `defaultSort: 'newest'` no longer flips to
+  featured order on Clear.
+- Clear resets the category even when there's no `data-filter="all"` chip.
+- A `?cat=` with no matching chip no longer skips the first render.
+- URL updates keep `history.state` (Astro's ClientRouter keeps its own there)
+  and the `#hash`, and are skipped when the URL wouldn't change.
+
+### Changed
+
+- Nothing breaking. `apply` defaults to `'live'`; omitting `search` leaves
+  behaviour unchanged.
+
 ## [1.3.0] — 2026-10-21
 
 ### Fixed

@@ -55,7 +55,8 @@ sort/filter logic looks at:
 
 The toolbar component covers:
 - `#open-filters` — drawer trigger (with `#active-filter-count` badge)
-- `#results-count` — live count label
+- `#results-count` — live count label (inside a `role="status"`, so
+  screen readers hear the new count after each change)
 - `#sort-select` — sort dropdown
 - `#view-grid` / `#view-list` — view toggle
 
@@ -76,6 +77,7 @@ default ids/classes:
 | Paged controls      | `#pagination`, `#pagination-pages`, `#page-prev`, `#page-next` | |
 | Load-more button    | `#load-more`                 |                                |
 | Infinite sentinel   | `#scroll-sentinel`           |                                |
+| Staged count        | `#staged-count`              | "Show **N** results" on Apply  |
 
 Override any of these via `selectors` if your markup uses different
 ids.
@@ -148,9 +150,16 @@ initFilterToolbar({
   listClass: 'fb-grid--list',
   cardSelector: '.product-card',
   attributeFacets: [ /* optional multi-select facets — see below */ ],
+  rangeFacets: [ /* optional numeric ranges — see below */ ],
+  search: { input: '#q' },            // optional text search — see below
+  apply: 'live',                      // | 'staged' — see below
+  stagedContainer: '#filter-drawer',  // staged mode only; default the drawer
   selectors: { /* override any of the default ids */ },
 });
 ```
+
+`defaultSort` is also what **Clear** returns the sort to. (The cards aren't
+re-sorted on load — render them in that order.)
 
 Idempotent — calling twice on the same `#product-grid` is a no-op.
 Safe to fire from both `DOMContentLoaded` and `astro:page-load`.
@@ -250,6 +259,91 @@ The runtime only reads and writes the two inputs' values (the ends can't
 cross), so the look is yours: two stacked inputs over one track make a
 dual-thumb slider. Cards with no value are hidden while the range is
 narrowed.
+
+## Text search
+
+`search` adds a free-text field. Every word typed must appear — in any
+order, ignoring case and accents — in the card data attributes you list,
+so the runtime never scrapes rendered markup. It ANDs with every other
+facet, filters 200 ms after the last keystroke (Enter filters at once and
+doesn't submit the input's `<form>`), and the new count goes through
+`#results-count`. Wrap your own count in `role="status"` if you don't use
+the toolbar component.
+
+```html
+<input id="q" type="search" aria-label="Search articles">
+
+<article class="product-card" data-title="Writing for the web"
+  data-excerpt="Short sentences win." data-tag="seo craft">…</article>
+```
+
+```ts
+initFilterToolbar({
+  pageSize: 24,
+  search: { input: '#q', dataKeys: ['title', 'excerpt', 'tag'] },
+});
+```
+
+| Field      | Default     | Description                                                   |
+|------------|-------------|---------------------------------------------------------------|
+| `input`    | — (required)| Selector for the `<input>`.                                   |
+| `dataKeys` | `['title']` | Card dataset keys searched (`'excerpt'` reads `data-excerpt`). |
+| `key`      | `'q'`       | URL param.                                                    |
+| `urlParam` | `true`      | Reflect into the URL (`?q=…`) and restore on load. On by default — a search is what people share. |
+| `debounce` | `200`       | Milliseconds after the last keystroke.                        |
+
+The query isn't counted in the `#active-filter-count` badge (the field
+shows it). Clear empties it.
+
+## Staged apply
+
+By default every change filters at once. With `apply: 'staged'`, changes
+made inside the drawer (or `stagedContainer`) are held until the Apply
+button (`#apply-filters`) fires:
+
+- the controls show the pending selection; the grid, count, badge and URL
+  keep showing the applied one;
+- `#staged-count` (if present) shows how many cards the pending selection
+  matches — `Show <span id="staged-count"></span> results`;
+- **Apply** commits and closes the drawer;
+- closing any other way (close button, backdrop, Escape) **discards** the
+  pending changes and puts the controls back;
+- **Clear** resets the pending AND the applied selection at once (and the
+  sort to `defaultSort`); the drawer stays open.
+
+Controls outside the container (a toolbar sort, a search field) stay live,
+without applying what's pending. The drawer's sort select is staged like
+any other control inside it.
+
+```ts
+initFilterToolbar({ pageSize: 24, apply: 'staged', attributeFacets: [/* … */] });
+```
+
+## Events and the controller
+
+After every change to the applied selection (and once at init) the grid
+fires a bubbling `filtertoolbar:change` event; `detail` is the state:
+
+```ts
+grid.addEventListener('filtertoolbar:change', (e) => {
+  const { count, category, sort, query, facets, ranges, maxPrice } = e.detail;
+  // e.g. draw removable "active filter" chips from facets
+});
+```
+
+`getFilterToolbar(grid = '#product-grid')` returns the controller for UI
+the runtime doesn't draw — it applies at once, never staged:
+
+```ts
+import { getFilterToolbar } from '@arraypress/filter-toolbar-astro/runtime';
+
+const ft = getFilterToolbar('#archive-grid');
+ft?.setFacet('tag', ['seo']);   // [] clears the facet
+ft?.setQuery('');
+ft?.state();                    // same shape as the event detail
+ft?.apply();                    // commit what's staged
+ft?.clear();                    // what Clear does
+```
 
 ## Deep-linking
 

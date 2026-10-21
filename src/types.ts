@@ -118,6 +118,11 @@ export interface FilterToolbarSelectors {
 	loadMoreBtn?: string;
 	/** Infinite-scroll sentinel. Default `#scroll-sentinel`. */
 	sentinel?: string;
+	/** Text that shows how many cards the CURRENT selection matches — in
+	 *  staged mode, before Apply (e.g. "Show <span id=…>12</span> results"
+	 *  on the Apply button); in live mode the same as `resultsCount`.
+	 *  Default `#staged-count`. */
+	stagedCount?: string;
 }
 
 /**
@@ -187,6 +192,82 @@ export interface RangeFacet {
 	urlParam?: boolean;
 }
 
+/**
+ * A free-text search facet: one `<input>` whose words must ALL appear in a
+ * card's text (case- and accent-insensitive, in any order), ANDed with every
+ * other facet. The text is read from card data attributes you choose, so the
+ * runtime never scrapes rendered markup:
+ *
+ *   <article data-title="Writing for the web" data-excerpt="…" data-tag="seo design">
+ *
+ * Typing filters after `debounce` ms; Enter (or submitting the input's
+ * `<form>`) filters at once and doesn't navigate. The count updates through
+ * `resultsCount`, so a `role="status"` around it announces the result.
+ */
+export interface SearchFacet {
+	/** Selector for the `<input type="search">`. */
+	input: string;
+	/** Card dataset keys whose text is searched. Default `['title']`
+	 *  (`data-title`); e.g. `['title', 'excerpt', 'tag']`. */
+	dataKeys?: string[];
+	/** URL query param. Default `'q'`. */
+	key?: string;
+	/** Reflect the query into the URL (`?q=…`) and restore it on load.
+	 *  Default `true` — unlike the other facets, because a search is the
+	 *  thing people share. */
+	urlParam?: boolean;
+	/** Milliseconds after the last keystroke before filtering. Default `200`. */
+	debounce?: number;
+}
+
+/**
+ * How selections take effect.
+ *
+ *   - `'live'`   (default) every change filters the listing at once.
+ *   - `'staged'` changes made INSIDE `stagedContainer` (the drawer, by
+ *                default) are held until the Apply control (`applyBtn`)
+ *                fires. Closing the drawer any other way (close button,
+ *                backdrop, Escape) discards them. Clear resets the staged
+ *                AND the applied selection at once. Controls outside the
+ *                container still filter live.
+ */
+export type ApplyMode = 'live' | 'staged';
+
+/** The applied selection, as `getFilterToolbar().state()` and the
+ *  `filtertoolbar:change` event report it. */
+export interface FilterToolbarState {
+	/** Cards the applied selection matches. */
+	count: number;
+	/** Active category chip value (`'all'` when none). */
+	category: string;
+	/** Active price ceiling, or `null` when the slider is at its max. */
+	maxPrice: number | null;
+	/** Active sort. */
+	sort: SortMode;
+	/** The search text (trimmed; `''` when none). */
+	query: string;
+	/** Selected values per attribute facet key (`[]` when none). */
+	facets: Record<string, string[]>;
+	/** Narrowed range per range facet key, or `null` at full width. */
+	ranges: Record<string, [number, number] | null>;
+}
+
+/** Programmatic control over an initialised listing — for UI the runtime
+ *  doesn't render itself, e.g. removable "active filter" chips. Changes made
+ *  through it apply at once (they're never staged). */
+export interface FilterToolbarController {
+	/** The applied selection. */
+	state(): FilterToolbarState;
+	/** Set an attribute facet's selected values (`[]` clears it). */
+	setFacet(key: string, values: string[]): void;
+	/** Set the search text. */
+	setQuery(query: string): void;
+	/** Commit staged changes (what the Apply control does, minus closing). */
+	apply(): void;
+	/** Reset every facet, the search and the sort (what Clear does). */
+	clear(): void;
+}
+
 /** Constructor options for `initFilterToolbar()`. */
 export interface FilterToolbarOptions {
 	/** Cards per page. Required. */
@@ -194,7 +275,9 @@ export interface FilterToolbarOptions {
 	/** Currency symbol for the price-slider label, e.g. `'£'`. Required
 	 *  if you wire a price slider; safe to pass `''` otherwise. */
 	currencySymbol?: string;
-	/** Default sort mode applied on first load. Default `'featured'`. */
+	/** The sort the listing starts in, and the one Clear returns to.
+	 *  Default `'featured'`. (The cards are not re-sorted on load: render
+	 *  them in this order.) */
 	defaultSort?: SortMode;
 	/**
 	 * Pagination UX mode. Default `'paged'`.
@@ -220,4 +303,15 @@ export interface FilterToolbarOptions {
 	/** Numeric range facets (BPM / year / …), each a pair of range
 	 *  inputs. Default: none. */
 	rangeFacets?: RangeFacet[];
+	/** A free-text search input. Default: none. */
+	search?: SearchFacet;
+	/** `'live'` (default) or `'staged'` — see {@link ApplyMode}. */
+	apply?: ApplyMode;
+	/** In staged mode, the element whose controls are staged. Default: the
+	 *  drawer (`selectors.drawer`). */
+	stagedContainer?: string;
 }
+
+/** Detail of the `filtertoolbar:change` event, fired (bubbling) on the grid
+ *  once at init and after every change to the applied selection. */
+export type FilterToolbarChangeDetail = FilterToolbarState;
